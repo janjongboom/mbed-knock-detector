@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Knock, knock? {{id}}</title>
+</head>
+
+<body>
+  <h1>Knock sensor {{id}}</h1>
+  <p id="value">{{value}}</p>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+  var socket = io.connect(location.origin);
+  socket.emit('subscribe-knocks', '{{id}}');
+  socket.on('knock', function(data) {
+    document.querySelector('#value').textContent = data;
+  });
+  </script>
+</body>
+</html>
