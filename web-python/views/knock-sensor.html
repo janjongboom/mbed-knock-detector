@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Knock, knock? {{id}}</title>
+</head>
+
+<body>
+  <h1>Knock sensor {{id}}</h1>
+  <p id="value">{{value}}</p>
+
+  <script>
+  // I don't know how to do websockets in Python...
+  function check() {
+    var x = new XMLHttpRequest();
+    x.onload = function() {
+      if (x.status === 200) {
+        document.querySelector('#value').textContent = x.responseText;
+      }
+      else console.error(x.status);
+
+      setTimeout(check, 1000);
+    };
+    x.open('GET', '/api/knock-sensor/{{id}}');
+    x.send();
+  }
+  check();
+  </script>
+</body>
+</html>
