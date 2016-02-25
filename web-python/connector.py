@@ -49,6 +49,13 @@ class knocksensor:
         if e.error:
             raise Error(e.error)
 
+        # also put a subscription for the resource in...
+        r = connector.putResourceSubscription(id, KNOCK_RESOURCE)
+        while not r.isDone():
+            None
+        if r.error:
+            raise Error(r.error)
+
         return template({'value': e.result, 'id': id})
 
 # because I don't know how to do websockets in Python
@@ -63,16 +70,12 @@ class apiknocksensor:
 
 # 'notifications' are routed here
 def notificationHandler(data):
+    # if you implement web sockets, you should use this :-) see the node example
     print "Notification Data Received: %s" %data['notifications']
     print "Notification Payload: %s" % base64.b64decode(data['notifications'][0]['payload'])
 
 if __name__ == "__main__":
     e = connector.startLongPolling()
     connector.setHandler('notifications', notificationHandler) # send 'notifications' to the notificationHandler FN
-    bla = connector.putResourceSubscription('38e7a161-1932-4da1-a76e-39e9999ad258', KNOCK_RESOURCE)
-    while not bla.isDone():
-        None
-    if bla.error:
-        raise Error(bla.error)
     app = web.application(urls, globals())
     app.run()
