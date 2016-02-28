@@ -13,152 +13,57 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <string>
-#include <sstream>
-#include <vector>
 #include "mbedclient.h"
 #include "mbed-client/m2minterfacefactory.h"
+#include "atmel-rf-driver/driverRFPhy.h"
 #include "mbed-client/m2mdevice.h"
 #include "mbed-client/m2mobjectinstance.h"
 #include "mbed-client/m2mresource.h"
-#include "mbed-hal/rtc_api.h"
 #include "minar/minar.h"
 #include "core-util/FunctionPointer.h"
 #include "mbed-drivers/test_env.h"
 #include "security.h"
-#include "fxos8700cq/fxos8700cq.h"
+
+#define HAVE_DEBUG 1
+#include "ns_trace.h"
+#define TRACE_GROUP "CLA"
+
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
 
 using namespace mbed::util;
 
-// It is recommended to use Device Connector as cloud technology.
-// Define following flag if using old device server approach.
-// #define USING_DEVICE_SERVER
 
-#ifdef USING_DEVICE_SERVER
-// Enter your mbed Device Server's IPv6 address and Port (5683) in format:
-// coap://<IPv6 address>:PORT.  For example: coap://FD00:FF1:CE0B:A5E0::1:5683
-const String &MBED_DEVICE_CONNECTOR_URI = "coap://FD00:FF1:CE0B:A5E0::1:5683";
-#else
 // Enter ARM mbed Device Connector IPv6 address and Port number in
 // format coap://<IPv6 address>:PORT. If ARM mbed Device Connector IPv6 address
 // is 2607:f0d0:2601:52::20 then the URI is: "coap://2607:f0d0:2601:52::20:5684"
-const String &MBED_DEVICE_CONNECTOR_URI = "coap://2607:f0d0:2601:52::20:5684";
-#endif
+// Staging Environment 2607:f0d0:3701:9f::20
+//Public Server 2607:f0d0:2601:52::20:5684
 
-const String &MANUFACTURER = "ARM";
-const String &TYPE = "type";
-const String &MODEL_NUMBER = "2015";
-const String &SERIAL_NUMBER = "12345";
+const String &MBED_DEVICE_CONNECTOR_URI = "coap://2607:f0d0:3701:9f::20:5684";
+
 const uint8_t STATIC_VALUE[] = "Static value";
 
-// Accelerometer config
-InterruptIn accel_interrupt_pin(PTC13);  // FRDM-K64F
-FXOS8700CQ accel(PTE25, PTE24, FXOS8700CQ_SLAVE_ADDR1); // FRDM-K64F
-DigitalOut led1(LED1);
-
-/*
- * The button contains one property (click count).
- * When `handle_button_click` is executed, the counter updates.
- */
-class ButtonResource {
-public:
-    ButtonResource() {
-        // create ObjectID with metadata tag of '3200', which is 'digital input'
-        btn_object = M2MInterfaceFactory::create_object("3200");
-        M2MObjectInstance* btn_inst = btn_object->create_object_instance();
-        // create resource with ID '5501', which is digital input counter
-        M2MResource* btn_res = btn_inst->create_dynamic_resource("5501", "Button",
-            M2MResourceInstance::INTEGER, true /* observable */);
-        // we can read this value
-        btn_res->set_operation(M2MBase::GET_ALLOWED);
-        // set initial value (all values in mbed Client are buffers)
-        // to be able to read this data easily in the Connector console, we'll use a string
-        btn_res->set_value((uint8_t*)"0", 1);
+const char *rf_board_type(){
+    rf_trx_part_e type = rf_radio_type_read();
+   const  char *rf_type_str = NULL;
+    switch(type){
+        case ATMEL_AT86RF212:
+            rf_type_str = "SubGhz-";
+            break;
+        case ATMEL_AT86RF231:
+        case ATMEL_AT86RF233:
+            rf_type_str = "2.4GHz-";
+            break;
+        default:
+            rf_type_str = "Uknown-";
+            break;
     }
+    return rf_type_str;
+}
 
-    M2MObject* get_object() {
-        return btn_object;
-    }
-
-    /*
-     * When you press the button, we read the current value of the click counter
-     * from mbed Device Connector, then up the value with one.
-     */
-    void handle_button_click() {
-        M2MObjectInstance* inst = btn_object->object_instance();
-        M2MResource* res = inst->resource("5501");
-
-        // up counter
-        counter++;
-
-        printf("handle_button_click, new value of counter is %d\r\n", counter);
-
-        // serialize the value of counter as a string, and tell connector
-        stringstream ss;
-        ss << counter;
-        std::string stringified = ss.str();
-        res->set_value((uint8_t*)stringified.c_str(), stringified.length());
-    }
-
-private:
-    M2MObject* btn_object;
-    uint16_t counter = 0;
-};
-
-class AccelerometerResource {
-public:
-    AccelerometerResource() {
-        accel_interrupt_pin.fall(this, &AccelerometerResource::interrupt);
-        accel_interrupt_pin.mode(PullUp);
-
-        accel.config_int();      // enabled interrupts from accelerometer
-        accel.config_feature();  // turn on motion detection
-        accel.enable();          // enable accelerometer
-
-        accel_object = M2MInterfaceFactory::create_object("accelerometer");
-        M2MObjectInstance* accel_inst = accel_object->create_object_instance();
-        accel_res = accel_inst->create_dynamic_resource("last_knock", "Knock",
-            M2MResourceInstance::INTEGER, true /* observable */);
-        accel_res->set_operation(M2MBase::GET_ALLOWED);
-        accel_res->set_value((uint8_t*)"0", 1);
-    }
-
-    M2MObject* get_object() {
-        return accel_object;
-    }
-
-private:
-    void led_off(void) {
-        led1 = 1;
-    }
-
-    void motion_detected(void) {
-        printf("motion_detected\r\n");
-        // update in connector
-        stringstream ss;
-        ss << rtc_read();
-        std::string stringified = ss.str();
-        accel_res->set_value((uint8_t*)stringified.c_str(), stringified.length());
-
-        minar::Scheduler::postCallback(mbed::util::FunctionPointer(this, &AccelerometerResource::led_off).bind()).delay(minar::milliseconds(1000));
-
-        wait(1);
-        led1 = 1;
-    }
-
-    void interrupt(void) {
-        led1 = 0;  // turn led on
-        accel.clear_int();
-        minar::Scheduler::postCallback(mbed::util::FunctionPointer(this, &AccelerometerResource::motion_detected).bind());
-    }
-
-    M2MObject* accel_object;
-    M2MResource* accel_res;
-};
-
-
-MbedClient::MbedClient()
-    : _led(LED3)
+MbedClient::MbedClient(MbedClientDevice deviceInfo)
+    : _led(LED3), _deviceInfo(deviceInfo)
 {
     _interface = NULL;
     _register_security = NULL;
@@ -174,15 +79,9 @@ MbedClient::MbedClient()
     // as per OMA LWM2M specification.
     M2MDevice *device_object = create_device_object();
 
-    // we create our button and Accelerometer resources
-    auto button_resource = new ButtonResource();
-    auto accel_resource = new AccelerometerResource();
-
     // Add all the objects that you would like to register
     // into the list and pass the list for register API.
     _object_list.push_back(device_object);
-    _object_list.push_back(button_resource->get_object());
-    _object_list.push_back(accel_resource->get_object());
 }
 
 MbedClient::~MbedClient()
@@ -212,20 +111,28 @@ bool MbedClient::create_interface()
     }
 
     srand(time(NULL));
-
-#ifdef USING_DEVICE_SERVER
-#undef MBED_DOMAIN
-#undef MBED_ENDPOINT_NAME
-#define MBED_DOMAIN ""
-#define MBED_ENDPOINT_NAME "jans-endpoint"
-    uint16_t port = 5683;
-#else
     uint16_t port = rand() % 65535 + 12345;
-#endif
+
+    String info_type;
+    if (strlen(_deviceInfo.DeviceType) == 0) {
+        const char *rf_type = rf_board_type();
+
+        uint8_t *mac_addr = 0;
+        mac_addr = get_mac_address();
+        char *mac = trace_array(mac_addr, 8);
+        String info_type = "CH-";
+        info_type.append(STR(YOTTA_CFG_MBED_MESH_API_SELECTED_RF_CHANNEL), strlen(STR(YOTTA_CFG_MBED_MESH_API_SELECTED_RF_CHANNEL)));
+        info_type.append("-", 1);
+        info_type.append(rf_type, strlen(rf_type));
+        info_type.append(mac, strlen(mac));
+    }
+    else {
+        info_type = _deviceInfo.DeviceType;
+    }
 
     _interface = M2MInterfaceFactory::create_interface(*this,
                  MBED_ENDPOINT_NAME,
-                 "knock-sensor",
+                 info_type,
                  3600,
                  port,
                  MBED_DOMAIN,
@@ -243,11 +150,7 @@ M2MSecurity *MbedClient::create_register_object()
     if (security) {
         security->set_resource_value(M2MSecurity::M2MServerUri, MBED_DEVICE_CONNECTOR_URI);
         security->set_resource_value(M2MSecurity::BootstrapServer, 0);
-#ifdef USING_DEVICE_SERVER
-        security->set_resource_value(M2MSecurity::SecurityMode, M2MSecurity::NoSecurity);
-#else
         security->set_resource_value(M2MSecurity::SecurityMode, M2MSecurity::Certificate);
-#endif
         security->set_resource_value(M2MSecurity::ServerPublicKey,SERVER_CERT,sizeof(SERVER_CERT));
         security->set_resource_value(M2MSecurity::PublicKey,CERT,sizeof(CERT));
         security->set_resource_value(M2MSecurity::Secretkey,KEY,sizeof(KEY));
@@ -261,10 +164,10 @@ M2MDevice *MbedClient::create_device_object()
     // device endpoint.
     M2MDevice *device = M2MInterfaceFactory::create_device();
     if (device) {
-        device->create_resource(M2MDevice::Manufacturer, MANUFACTURER);
-        device->create_resource(M2MDevice::DeviceType, TYPE);
-        device->create_resource(M2MDevice::ModelNumber, MODEL_NUMBER);
-        device->create_resource(M2MDevice::SerialNumber, SERIAL_NUMBER);
+        device->create_resource(M2MDevice::Manufacturer, _deviceInfo.Manufacturer);
+        device->create_resource(M2MDevice::DeviceType, _deviceInfo.Type);
+        device->create_resource(M2MDevice::ModelNumber, _deviceInfo.ModelNumber);
+        device->create_resource(M2MDevice::SerialNumber, _deviceInfo.SerialNumber);
     }
     return device;
 }

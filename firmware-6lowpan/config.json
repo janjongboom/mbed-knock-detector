@@ -1,0 +1,13 @@
+{
+    "mbed-os": {
+        "net": {
+            "stacks": {
+                "lwip": false,
+                "nanostack": true
+            }
+        }
+    },
+    "mbed-mesh-api": {
+        "selected-rf-channel": 26
+    }
+}

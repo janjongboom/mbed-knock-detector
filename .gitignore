@@ -1,2 +1,5 @@
-node_modules/
+node_modules/body-parser/
+node_modules/express/
+node_modules/hbs/
+node_modules/socket.io/
 .workspace

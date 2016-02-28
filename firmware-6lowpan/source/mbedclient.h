@@ -21,14 +21,26 @@
 #include "mbed-mesh-api/mesh_interface_types.h"
 #include "minar/minar.h"
 
+struct MbedClientDevice {
+    const char* Manufacturer;
+    const char* Type;
+    const char* ModelNumber;
+    const char* SerialNumber;
+    const char* DeviceType;
+};
+
+
 class M2MDevice;
 class M2MSecurity;
 class M2MObject;
 
+
+uint8_t *get_mac_address();
+
 class MbedClient : public M2MInterfaceObserver
 {
 public:
-    MbedClient();
+    MbedClient(MbedClientDevice device);
 
     ~MbedClient();
 
@@ -83,6 +95,10 @@ public:
     //Handler for mesh network status events
     void mesh_network_handler(mesh_connection_status_t status);
 
+    void object_list_push(M2MObject* obj) {
+        _object_list.push_back(obj);
+    }
+
 private:
     void wait();
     void idle();
@@ -91,11 +107,12 @@ private:
     M2MSecurity         *_register_security;
     M2MDevice           *_device;
     M2MObject           *_object;
-    M2MObjectList       _object_list;
     minar::callback_handle_t   _update_timer_handle;
+    M2MObjectList       _object_list;
     bool                _registered;
     bool                _registering;
     bool                _updating;
     int                 _value;
+    MbedClientDevice    _deviceInfo;
 };
 #endif //__MBEDCLIENT_H__

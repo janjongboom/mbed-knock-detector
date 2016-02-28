@@ -6,6 +6,7 @@
   "author": "Jan Jongboom <jan.jongboom@arm.com>",
   "license": "WTFPL",
   "dependencies": {
+    "body-parser": "^1.15.0",
     "express": "^4.13.4",
     "hbs": "^4.0.0",
     "mbed-connector": "git+https://github.com/ARMmbed/mbed-connector-node.git",
